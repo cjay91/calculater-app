@@ -1,0 +1,15 @@
+{
+  "name": "calculater-app",
+  "version": "1.0.0",
+  "description": "A simple calculator web application deployed on AWS using Terraform and GitHub Actions.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.21.1"
+  }
+}
