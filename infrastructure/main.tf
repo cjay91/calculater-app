@@ -124,14 +124,25 @@ resource "aws_lb_target_group" "app" {
   target_type = "ip"
 
   health_check {
-    path                = "/"
+    enabled             = true
     healthy_threshold   = 2
-    unhealthy_threshold = 10
-    timeout             = 30
-    interval            = 60
+    interval            = 30
+    matcher            = "200"
+    path               = "/"
+    port               = "traffic-port"
+    protocol           = "HTTP"
+    timeout            = 5
+    unhealthy_threshold = 3
   }
 
-  depends_on = [aws_lb.app]
+  stickiness {
+    type    = "lb_cookie"
+    enabled = false
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_lb_listener" "app" {
@@ -146,8 +157,6 @@ resource "aws_lb_listener" "app" {
 
   depends_on = [aws_lb_target_group.app]
 }
-
-# Update ECS Service to use multiple subnets and add depends_on
 resource "aws_ecs_service" "app" {
   name            = "calculator-service"
   cluster         = aws_ecs_cluster.main.id
@@ -156,7 +165,7 @@ resource "aws_ecs_service" "app" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = aws_subnet.public[*].id  # Use all public subnets
+    subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.app.id]
     assign_public_ip = true
   }
@@ -165,6 +174,16 @@ resource "aws_ecs_service" "app" {
     target_group_arn = aws_lb_target_group.app.arn
     container_name   = "calculator-app"
     container_port   = 3000
+  }
+
+  deployment_configuration {
+    maximum_percent         = 200
+    minimum_healthy_percent = 100
+  }
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
   }
 
   depends_on = [
@@ -192,8 +211,7 @@ resource "aws_ecs_cluster" "main" {
     value = "enabled"
   }
 }
-
-# ECS Task Definition
+# Update the ECS task definition in main.tf
 resource "aws_ecs_task_definition" "app" {
   family                   = "calculator-app"
   network_mode             = "awsvpc"
@@ -204,8 +222,10 @@ resource "aws_ecs_task_definition" "app" {
 
   container_definitions = jsonencode([
     {
-      name  = "calculator-app"
-      image = "${aws_ecr_repository.app.repository_url}:latest"
+      name      = "calculator-app"
+      image     = "${aws_ecr_repository.app.repository_url}:latest"
+      essential = true
+
       portMappings = [
         {
           containerPort = 3000
@@ -213,8 +233,38 @@ resource "aws_ecs_task_definition" "app" {
           protocol      = "tcp"
         }
       ]
+
+      environment = [
+        {
+          name  = "PORT",
+          value = "3000"
+        }
+      ]
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost:3000/ || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = "/ecs/calculator-app"
+          "awslogs-region"        = "us-east-1"
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
     }
   ])
+}
+
+# Add CloudWatch Log Group
+resource "aws_cloudwatch_log_group" "app" {
+  name              = "/ecs/calculator-app"
+  retention_in_days = 30
 }
 
 # IAM Role for ECS
