@@ -1,8 +1,16 @@
-# infrastructure/outputs.tf
-
 output "alb_dns_name" {
   description = "DNS name of the Application Load Balancer"
   value       = aws_lb.app.dns_name
+}
+
+output "vpc_id" {
+  description = "ID of the VPC"
+  value       = aws_vpc.main.id
+}
+
+output "public_subnet_ids" {
+  description = "IDs of the public subnets"
+  value       = aws_subnet.public[*].id
 }
 
 output "ecr_repository_url" {
